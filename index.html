@@ -94,6 +94,38 @@ main {
   overflow: hidden;
 }
 
+/* TAB BAR */
+.tab-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.tab-button {
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #374151;
+  background: #020617;
+  color: #e5e7eb;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tab-button.active {
+  background: #2563eb;
+  color: #f9fafb;
+}
+
+.tab-add {
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px dashed #374151;
+  background: #020617;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 12px;
+}
+
 .paste-area {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -119,6 +151,7 @@ main {
 
 .search-box {
   display: flex;
+  width: 100%;
   gap: 6px;
   align-items: center;
 }
@@ -131,6 +164,21 @@ main {
   background: #020617;
   color: #e5e7eb;
   font-size: 12px;
+}
+
+.search-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.search-nav button {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  font-size: 11px;
 }
 
 .stack-container {
@@ -270,23 +318,40 @@ main {
 
 <main>
 
-  <!-- THREE SEPARATE PASTE FIELDS -->
+  <!-- TAB BAR -->
+  <div class="tab-bar" id="tabBar">
+    <!-- Tabs rendered by JS -->
+  </div>
+
+  <!-- THREE SEPARATE PASTE FIELDS PER CURRENT TAB -->
   <section class="paste-area">
     <textarea id="codePaste" placeholder="CODE LAYERS ONLY"></textarea>
     <textarea id="readingPaste" placeholder="READING LINES ONLY"></textarea>
     <textarea id="recitePaste" placeholder="RECITE LINES ONLY"></textarea>
   </section>
 
-  <!-- THREE LIVE SEARCH BARS -->
+  <!-- THREE LIVE SEARCH BARS WITH NAVIGATION -->
   <section class="search-area">
     <div class="search-box">
       <input id="codeSearch" placeholder="Search in CODE layers">
+      <div class="search-nav">
+        <button id="codePrev">Prev</button>
+        <button id="codeNext">Next</button>
+      </div>
     </div>
     <div class="search-box">
       <input id="readingSearch" placeholder="Search in READING layout">
+      <div class="search-nav">
+        <button id="readingPrev">Prev</button>
+        <button id="readingNext">Next</button>
+      </div>
     </div>
     <div class="search-box">
       <input id="reciteSearch" placeholder="Search in RECITE layout">
+      <div class="search-nav">
+        <button id="recitePrev">Prev</button>
+        <button id="reciteNext">Next</button>
+      </div>
     </div>
   </section>
 
@@ -346,9 +411,25 @@ let mode = 1;
 
 let scrollTimeout = null;
 
+/* search navigation state */
+let codeMatches = [];
+let codeMatchIndex = -1;
+
+let readingMatches = [];
+let readingMatchIndex = -1;
+
+let reciteMatches = [];
+let reciteMatchIndex = -1;
+
+/* TAB SYSTEM */
+let tabs = [];
+let currentTabIndex = 0;
+
 /* ----------------------------------------------------------
    ELEMENTS
 ---------------------------------------------------------- */
+const tabBar = document.getElementById("tabBar");
+
 const codePaste = document.getElementById("codePaste");
 const readingPaste = document.getElementById("readingPaste");
 const recitePaste = document.getElementById("recitePaste");
@@ -356,6 +437,13 @@ const recitePaste = document.getElementById("recitePaste");
 const codeSearch = document.getElementById("codeSearch");
 const readingSearch = document.getElementById("readingSearch");
 const reciteSearch = document.getElementById("reciteSearch");
+
+const codePrev = document.getElementById("codePrev");
+const codeNext = document.getElementById("codeNext");
+const readingPrev = document.getElementById("readingPrev");
+const readingNext = document.getElementById("readingNext");
+const recitePrev = document.getElementById("recitePrev");
+const reciteNext = document.getElementById("reciteNext");
 
 const codeList = document.getElementById("codeList");
 
@@ -383,30 +471,127 @@ const mode2Btn = document.getElementById("mode2Btn");
 /* ----------------------------------------------------------
    LOCAL STORAGE KEYS
 ---------------------------------------------------------- */
-const STORAGE_KEY_CODE = "codeReader_codePaste";
-const STORAGE_KEY_READING = "codeReader_readingPaste";
-const STORAGE_KEY_RECITE = "codeReader_recitePaste";
+const STORAGE_KEY_TABS = "codeReader_tabs";
 
 /* ----------------------------------------------------------
-   LOAD FROM STORAGE
+   TAB STORAGE
 ---------------------------------------------------------- */
-function loadFromStorage() {
-  const savedCode = localStorage.getItem(STORAGE_KEY_CODE);
-  const savedReading = localStorage.getItem(STORAGE_KEY_READING);
-  const savedRecite = localStorage.getItem(STORAGE_KEY_RECITE);
+function loadTabsFromStorage() {
+  const raw = localStorage.getItem(STORAGE_KEY_TABS);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        tabs = parsed;
+        return;
+      }
+    } catch (e) {}
+  }
+  // default: one tab
+  tabs = [
+    { name: "Tab 1", codeText: "", readingText: "", reciteText: "" }
+  ];
+}
 
-  if (savedCode !== null) codePaste.value = savedCode;
-  if (savedReading !== null) readingPaste.value = savedReading;
-  if (savedRecite !== null) recitePaste.value = savedRecite;
+function saveTabsToStorage() {
+  localStorage.setItem(STORAGE_KEY_TABS, JSON.stringify(tabs));
 }
 
 /* ----------------------------------------------------------
-   SAVE TO STORAGE
+   TAB RENDERING
 ---------------------------------------------------------- */
-function saveToStorage() {
-  localStorage.setItem(STORAGE_KEY_CODE, codePaste.value);
-  localStorage.setItem(STORAGE_KEY_READING, readingPaste.value);
-  localStorage.setItem(STORAGE_KEY_RECITE, recitePaste.value);
+function renderTabs() {
+  tabBar.innerHTML = "";
+  tabs.forEach((tab, i) => {
+    const btn = document.createElement("button");
+    btn.className = "tab-button" + (i === currentTabIndex ? " active" : "");
+    btn.textContent = tab.name;
+    btn.onclick = () => switchTab(i);
+    tabBar.appendChild(btn);
+  });
+
+  const addBtn = document.createElement("button");
+  addBtn.className = "tab-add";
+  addBtn.textContent = "+ Add Tab";
+  addBtn.onclick = addTab;
+  tabBar.appendChild(addBtn);
+}
+
+function addTab() {
+  const newIndex = tabs.length + 1;
+  tabs.push({
+    name: "Tab " + newIndex,
+    codeText: "",
+    readingText: "",
+    reciteText: ""
+  });
+  saveTabsToStorage();
+  switchTab(tabs.length - 1);
+}
+
+/* ----------------------------------------------------------
+   TAB SWITCH
+---------------------------------------------------------- */
+function syncCurrentTabFromFields() {
+  const tab = tabs[currentTabIndex];
+  tab.codeText = codePaste.value;
+  tab.readingText = readingPaste.value;
+  tab.reciteText = recitePaste.value;
+  saveTabsToStorage();
+}
+
+function loadFieldsFromCurrentTab() {
+  const tab = tabs[currentTabIndex];
+  codePaste.value = tab.codeText;
+  readingPaste.value = tab.readingText;
+  recitePaste.value = tab.reciteText;
+}
+
+function switchTab(index) {
+  // save current tab data
+  syncCurrentTabFromFields();
+
+  currentTabIndex = index;
+  renderTabs();
+  loadFieldsFromCurrentTab();
+
+  // rebuild layers for this tab
+  buildLayers();
+  readingAccum = "";
+  reciteAccum = "";
+  elapsedMs = 0;
+  lineElapsedMs = 0;
+  computeLineDuration();
+  renderCodeList();
+
+  if (layers.length > 0) {
+    setCurrentIndex(0);
+  } else {
+    currentIndex = -1;
+    readingText.textContent = "";
+    reciteText.textContent = "";
+  }
+
+  if (mode === 2) {
+    readingText.textContent = layers.map(l => l.reading).join("\n");
+    reciteText.textContent = layers.map(l => l.recite).join("\n");
+  }
+
+  centerAll();
+  liveSearchCode();
+  liveSearchReading();
+  liveSearchRecite();
+}
+
+/* ----------------------------------------------------------
+   SAVE FIELDS TO CURRENT TAB
+---------------------------------------------------------- */
+function saveFieldsToCurrentTab() {
+  const tab = tabs[currentTabIndex];
+  tab.codeText = codePaste.value;
+  tab.readingText = readingPaste.value;
+  tab.reciteText = recitePaste.value;
+  saveTabsToStorage();
 }
 
 /* ----------------------------------------------------------
@@ -429,7 +614,7 @@ function buildLayers() {
     });
   }
 
-  saveToStorage();
+  saveFieldsToCurrentTab();
 }
 
 /* ----------------------------------------------------------
@@ -474,8 +659,9 @@ function editCodeLine(i, li) {
   input.onblur = () => {
     layers[i].code = input.value;
     codePaste.value = layers.map(l => l.code).join("\n");
-    saveToStorage();
+    saveFieldsToCurrentTab();
     renderCodeList();
+    liveSearchCode();
   };
 }
 
@@ -567,7 +753,6 @@ function centerScrollRecite() {
 function centerAll() {
   centerScrollCode();
 
-  // Do not force recite to middle while actively editing it in manual mode
   if (!(mode === 2 && document.activeElement === reciteText)) {
     centerScrollReading();
     centerScrollRecite();
@@ -680,7 +865,6 @@ function prevLine() {
 function switchMode(newMode) {
   if (mode === newMode) return;
 
-  // Leaving manual mode: sync edits back into layers and storage
   if (mode === 2 && newMode === 1) {
     const editedReading = readingText.textContent.split("\n");
     const editedRecite = reciteText.textContent.split("\n");
@@ -692,13 +876,12 @@ function switchMode(newMode) {
 
     readingPaste.value = layers.map(l => l.reading).join("\n");
     recitePaste.value = layers.map(l => l.recite).join("\n");
-    saveToStorage();
+    saveFieldsToCurrentTab();
   }
 
   mode = newMode;
 
   if (mode === 1) {
-    // AUTO MODE
     readingText.contentEditable = "false";
     reciteText.contentEditable = "false";
 
@@ -719,7 +902,6 @@ function switchMode(newMode) {
     if (layers.length > 0) setCurrentIndex(0);
 
   } else {
-    // MANUAL MODE
     pauseTimer();
 
     playBtn.disabled = true;
@@ -779,6 +961,9 @@ buildBtn.onclick = () => {
   }
 
   centerAll();
+  liveSearchCode();
+  liveSearchReading();
+  liveSearchRecite();
 };
 
 /* ----------------------------------------------------------
@@ -820,37 +1005,74 @@ function clearHighlightsInTextElement(el) {
   el.innerHTML = cleaned;
 }
 
-function highlightFirstMatchInText(el, term) {
-  if (!term) {
-    clearHighlightsInTextElement(el);
+function buildMatches(text, term) {
+  const matches = [];
+  if (!term) return matches;
+  let idx = text.indexOf(term);
+  while (idx !== -1) {
+    matches.push({ start: idx, end: idx + term.length });
+    idx = text.indexOf(term, idx + term.length);
+  }
+  return matches;
+}
+
+function renderMatchHighlight(el, text, matches, currentIndex) {
+  if (!matches.length) {
+    el.textContent = text;
     return;
   }
-  const text = el.textContent;
-  const idx = text.indexOf(term);
-  if (idx === -1) {
-    clearHighlightsInTextElement(el);
-    return;
-  }
-  const before = text.slice(0, idx);
-  const match = text.slice(idx, idx + term.length);
-  const after = text.slice(idx + term.length);
-  el.innerHTML = before + `<mark class="highlight">${match}</mark>` + after;
+  let html = "";
+  let lastEnd = 0;
+  matches.forEach((m, i) => {
+    html += text.slice(lastEnd, m.start);
+    const segment = text.slice(m.start, m.end);
+    if (i === currentIndex) {
+      html += `<mark class="highlight">${segment}</mark>`;
+    } else {
+      html += segment;
+    }
+    lastEnd = m.end;
+  });
+  html += text.slice(lastEnd);
+  el.innerHTML = html;
 }
 
 /* ----------------------------------------------------------
-   LIVE SEARCH FUNCTIONS
+   LIVE SEARCH FUNCTIONS + NAVIGATION
 ---------------------------------------------------------- */
 function liveSearchCode() {
   const term = codeSearch.value;
   const items = document.querySelectorAll(".code-item");
-  let foundIndex = -1;
+  codeMatches = [];
+  codeMatchIndex = -1;
 
   items.forEach((item, i) => {
     const span = item.querySelector(".code-item-text");
-    const text = span.textContent;
-    if (term && text.includes(term) && foundIndex === -1) {
-      foundIndex = i;
-      const idx = text.indexOf(term);
+    const text = layers[i]?.code ?? "";
+    if (term && text.includes(term)) {
+      codeMatches.push(i);
+    }
+    span.textContent = text;
+  });
+
+  if (codeMatches.length > 0) {
+    codeMatchIndex = 0;
+    applyCodeMatchHighlight();
+  }
+}
+
+function applyCodeMatchHighlight() {
+  const term = codeSearch.value;
+  const items = document.querySelectorAll(".code-item");
+  items.forEach((item, i) => {
+    const span = item.querySelector(".code-item-text");
+    const text = layers[i]?.code ?? "";
+    if (!term) {
+      span.textContent = text;
+      return;
+    }
+    const idx = text.indexOf(term);
+    if (idx !== -1 && codeMatches[codeMatchIndex] === i) {
       const before = text.slice(0, idx);
       const match = text.slice(idx, idx + term.length);
       const after = text.slice(idx + term.length);
@@ -858,46 +1080,93 @@ function liveSearchCode() {
       item.scrollIntoView({ behavior: "smooth", block: "center" });
       setCurrentIndex(i);
     } else {
-      span.innerHTML = text; // remove old highlight
+      span.textContent = text;
     }
   });
+}
 
-  if (!term) {
-    items.forEach(item => {
-      const span = item.querySelector(".code-item-text");
-      span.textContent = span.textContent; // reset
-    });
-  }
+function codeNextMatch() {
+  if (!codeMatches.length) return;
+  codeMatchIndex = (codeMatchIndex + 1) % codeMatches.length;
+  applyCodeMatchHighlight();
+}
+
+function codePrevMatch() {
+  if (!codeMatches.length) return;
+  codeMatchIndex = (codeMatchIndex - 1 + codeMatches.length) % codeMatches.length;
+  applyCodeMatchHighlight();
 }
 
 function liveSearchReading() {
   const term = readingSearch.value;
-  clearHighlightsInTextElement(readingText);
-  highlightFirstMatchInText(readingText, term);
-  if (term) {
-    const mark = readingText.querySelector("mark.highlight");
-    if (mark) {
-      const rect = mark.getBoundingClientRect();
-      const panelRect = readingPanel.getBoundingClientRect();
-      const delta = (rect.top + rect.height / 2) - (panelRect.top + panelRect.height / 2);
-      readingPanel.scrollTop += delta;
-    }
+  const text = readingText.textContent;
+  readingMatches = buildMatches(text, term);
+  readingMatchIndex = readingMatches.length ? 0 : -1;
+  renderMatchHighlight(readingText, text, readingMatches, readingMatchIndex);
+  scrollToCurrentReadingMatch();
+}
+
+function scrollToCurrentReadingMatch() {
+  if (!readingMatches.length || readingMatchIndex < 0) return;
+  const mark = readingText.querySelector("mark.highlight");
+  if (mark) {
+    const rect = mark.getBoundingClientRect();
+    const panelRect = readingPanel.getBoundingClientRect();
+    const delta = (rect.top + rect.height / 2) - (panelRect.top + panelRect.height / 2);
+    readingPanel.scrollTop += delta;
   }
+}
+
+function readingNextMatch() {
+  if (!readingMatches.length) return;
+  const text = readingText.textContent;
+  readingMatchIndex = (readingMatchIndex + 1) % readingMatches.length;
+  renderMatchHighlight(readingText, text, readingMatches, readingMatchIndex);
+  scrollToCurrentReadingMatch();
+}
+
+function readingPrevMatch() {
+  if (!readingMatches.length) return;
+  const text = readingText.textContent;
+  readingMatchIndex = (readingMatchIndex - 1 + readingMatches.length) % readingMatches.length;
+  renderMatchHighlight(readingText, text, readingMatches, readingMatchIndex);
+  scrollToCurrentReadingMatch();
 }
 
 function liveSearchRecite() {
   const term = reciteSearch.value;
-  clearHighlightsInTextElement(reciteText);
-  highlightFirstMatchInText(reciteText, term);
-  if (term) {
-    const mark = reciteText.querySelector("mark.highlight");
-    if (mark) {
-      const rect = mark.getBoundingClientRect();
-      const panelRect = recitePanel.getBoundingClientRect();
-      const delta = (rect.top + rect.height / 2) - (panelRect.top + panelRect.height / 2);
-      recitePanel.scrollTop += delta;
-    }
+  const text = reciteText.textContent;
+  reciteMatches = buildMatches(text, term);
+  reciteMatchIndex = reciteMatches.length ? 0 : -1;
+  renderMatchHighlight(reciteText, text, reciteMatches, reciteMatchIndex);
+  scrollToCurrentReciteMatch();
+}
+
+function scrollToCurrentReciteMatch() {
+  if (!reciteMatches.length || reciteMatchIndex < 0) return;
+  const mark = reciteText.querySelector("mark.highlight");
+  if (mark) {
+    const rect = mark.getBoundingClientRect();
+    const panelRect = recitePanel.getBoundingClientRect();
+    const delta = (rect.top + rect.height / 2) - (panelRect.top + panelRect.height / 2);
+    recitePanel.scrollTop += delta;
   }
+}
+
+function reciteNextMatch() {
+  if (!reciteMatches.length) return;
+  const text = reciteText.textContent;
+  reciteMatchIndex = (reciteMatchIndex + 1) % reciteMatches.length;
+  renderMatchHighlight(reciteText, text, reciteMatches, reciteMatchIndex);
+  scrollToCurrentReciteMatch();
+}
+
+function recitePrevMatch() {
+  if (!reciteMatches.length) return;
+  const text = reciteText.textContent;
+  reciteMatchIndex = (reciteMatchIndex - 1 + reciteMatches.length) % reciteMatches.length;
+  renderMatchHighlight(reciteText, text, reciteMatches, reciteMatchIndex);
+  scrollToCurrentReciteMatch();
 }
 
 /* ----------------------------------------------------------
@@ -906,6 +1175,15 @@ function liveSearchRecite() {
 codeSearch.addEventListener("input", liveSearchCode);
 readingSearch.addEventListener("input", liveSearchReading);
 reciteSearch.addEventListener("input", liveSearchRecite);
+
+codeNext.addEventListener("click", codeNextMatch);
+codePrev.addEventListener("click", codePrevMatch);
+
+readingNext.addEventListener("click", readingNextMatch);
+readingPrev.addEventListener("click", readingPrevMatch);
+
+reciteNext.addEventListener("click", reciteNextMatch);
+recitePrev.addEventListener("click", recitePrevMatch);
 
 /* ----------------------------------------------------------
    MODE BUTTONS
@@ -924,19 +1202,21 @@ codePanel.addEventListener("scroll", handleScrollActivity);
    INPUT CHANGE -> SAVE
 ---------------------------------------------------------- */
 codePaste.addEventListener("input", () => {
-  saveToStorage();
+  saveFieldsToCurrentTab();
 });
 readingPaste.addEventListener("input", () => {
-  saveToStorage();
+  saveFieldsToCurrentTab();
 });
 recitePaste.addEventListener("input", () => {
-  saveToStorage();
+  saveFieldsToCurrentTab();
 });
 
 /* ----------------------------------------------------------
    INITIAL STATE
 ---------------------------------------------------------- */
-loadFromStorage();
+loadTabsFromStorage();
+renderTabs();
+loadFieldsFromCurrentTab();
 buildLayers();
 renderCodeList();
 
@@ -944,6 +1224,9 @@ readingText.contentEditable = "false";
 reciteText.contentEditable = "false";
 updateTimeLeft();
 centerAll();
+liveSearchCode();
+liveSearchReading();
+liveSearchRecite();
 </script>
 </body>
 </html>
