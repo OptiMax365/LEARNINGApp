@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title> – Research</title>
+<title>Code Reader – Human Reading Animation</title>
 
 <style>
 * {
@@ -111,6 +111,28 @@ main {
   resize: vertical;
 }
 
+.search-area {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.search-box {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.search-box input {
+  flex: 1;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #374151;
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 12px;
+}
+
 .stack-container {
   flex: 1;
   display: grid;
@@ -189,6 +211,13 @@ main {
   line-height: 1.5;
 }
 
+.highlight {
+  background: #16a34a;
+  color: #f9fafb;
+  padding: 0 1px;
+  border-radius: 2px;
+}
+
 .time-follow {
   margin-top: 10px;
   font-size: 14px;
@@ -217,7 +246,7 @@ main {
 
 <body>
 <header>
-  <h1> QUICK NOTE</h1>
+  <h1>CODE READER STACK</h1>
 
   <div class="top-buttons">
     <button id="buildStack">Build</button>
@@ -246,6 +275,19 @@ main {
     <textarea id="codePaste" placeholder="CODE LAYERS ONLY"></textarea>
     <textarea id="readingPaste" placeholder="READING LINES ONLY"></textarea>
     <textarea id="recitePaste" placeholder="RECITE LINES ONLY"></textarea>
+  </section>
+
+  <!-- THREE LIVE SEARCH BARS -->
+  <section class="search-area">
+    <div class="search-box">
+      <input id="codeSearch" placeholder="Search in CODE layers">
+    </div>
+    <div class="search-box">
+      <input id="readingSearch" placeholder="Search in READING layout">
+    </div>
+    <div class="search-box">
+      <input id="reciteSearch" placeholder="Search in RECITE layout">
+    </div>
   </section>
 
   <section class="stack-container">
@@ -311,6 +353,10 @@ const codePaste = document.getElementById("codePaste");
 const readingPaste = document.getElementById("readingPaste");
 const recitePaste = document.getElementById("recitePaste");
 
+const codeSearch = document.getElementById("codeSearch");
+const readingSearch = document.getElementById("readingSearch");
+const reciteSearch = document.getElementById("reciteSearch");
+
 const codeList = document.getElementById("codeList");
 
 const readingText = document.getElementById("readingText");
@@ -335,6 +381,35 @@ const mode1Btn = document.getElementById("mode1Btn");
 const mode2Btn = document.getElementById("mode2Btn");
 
 /* ----------------------------------------------------------
+   LOCAL STORAGE KEYS
+---------------------------------------------------------- */
+const STORAGE_KEY_CODE = "codeReader_codePaste";
+const STORAGE_KEY_READING = "codeReader_readingPaste";
+const STORAGE_KEY_RECITE = "codeReader_recitePaste";
+
+/* ----------------------------------------------------------
+   LOAD FROM STORAGE
+---------------------------------------------------------- */
+function loadFromStorage() {
+  const savedCode = localStorage.getItem(STORAGE_KEY_CODE);
+  const savedReading = localStorage.getItem(STORAGE_KEY_READING);
+  const savedRecite = localStorage.getItem(STORAGE_KEY_RECITE);
+
+  if (savedCode !== null) codePaste.value = savedCode;
+  if (savedReading !== null) readingPaste.value = savedReading;
+  if (savedRecite !== null) recitePaste.value = savedRecite;
+}
+
+/* ----------------------------------------------------------
+   SAVE TO STORAGE
+---------------------------------------------------------- */
+function saveToStorage() {
+  localStorage.setItem(STORAGE_KEY_CODE, codePaste.value);
+  localStorage.setItem(STORAGE_KEY_READING, readingPaste.value);
+  localStorage.setItem(STORAGE_KEY_RECITE, recitePaste.value);
+}
+
+/* ----------------------------------------------------------
    PARSE 3 FIELDS INTO LAYERS
 ---------------------------------------------------------- */
 function buildLayers() {
@@ -353,6 +428,8 @@ function buildLayers() {
       recite: reciteLines[i] ?? ""
     });
   }
+
+  saveToStorage();
 }
 
 /* ----------------------------------------------------------
@@ -364,7 +441,6 @@ function renderCodeList() {
   layers.forEach((layer, i) => {
     const li = document.createElement("li");
     li.dataset.index = i;
-
     li.className = "code-item";
 
     li.innerHTML = `
@@ -384,7 +460,6 @@ function renderCodeList() {
    EDIT CODE LINE DIRECTLY
 ---------------------------------------------------------- */
 function editCodeLine(i, li) {
-  const textSpan = li.querySelector(".code-item-text");
   const oldValue = layers[i].code;
 
   const input = document.createElement("textarea");
@@ -398,6 +473,8 @@ function editCodeLine(i, li) {
 
   input.onblur = () => {
     layers[i].code = input.value;
+    codePaste.value = layers.map(l => l.code).join("\n");
+    saveToStorage();
     renderCodeList();
   };
 }
@@ -489,8 +566,12 @@ function centerScrollRecite() {
 
 function centerAll() {
   centerScrollCode();
-  centerScrollReading();
-  centerScrollRecite();
+
+  // Do not force recite to middle while actively editing it in manual mode
+  if (!(mode === 2 && document.activeElement === reciteText)) {
+    centerScrollReading();
+    centerScrollRecite();
+  }
 }
 
 /* ----------------------------------------------------------
@@ -596,13 +677,10 @@ function prevLine() {
 /* ----------------------------------------------------------
    MANUAL MODE (ALL EDITABLE)
 ---------------------------------------------------------- */
-/* ----------------------------------------------------------
-   MANUAL MODE (ALL EDITABLE)
----------------------------------------------------------- */
 function switchMode(newMode) {
   if (mode === newMode) return;
 
-  // If leaving manual mode, sync edits back into layers
+  // Leaving manual mode: sync edits back into layers and storage
   if (mode === 2 && newMode === 1) {
     const editedReading = readingText.textContent.split("\n");
     const editedRecite = reciteText.textContent.split("\n");
@@ -612,10 +690,9 @@ function switchMode(newMode) {
       if (editedRecite[i] !== undefined) layers[i].recite = editedRecite[i];
     }
 
-    // Update paste fields so everything stays in sync
-    codePaste.value = layers.map(l => l.code).join("\n");
     readingPaste.value = layers.map(l => l.reading).join("\n");
     recitePaste.value = layers.map(l => l.recite).join("\n");
+    saveToStorage();
   }
 
   mode = newMode;
@@ -735,6 +812,102 @@ applyTimeBtn.onclick = () => {
 };
 
 /* ----------------------------------------------------------
+   SEARCH + HIGHLIGHT HELPERS
+---------------------------------------------------------- */
+function clearHighlightsInTextElement(el) {
+  const html = el.innerHTML;
+  const cleaned = html.replace(/<mark class="highlight">/g, "").replace(/<\/mark>/g, "");
+  el.innerHTML = cleaned;
+}
+
+function highlightFirstMatchInText(el, term) {
+  if (!term) {
+    clearHighlightsInTextElement(el);
+    return;
+  }
+  const text = el.textContent;
+  const idx = text.indexOf(term);
+  if (idx === -1) {
+    clearHighlightsInTextElement(el);
+    return;
+  }
+  const before = text.slice(0, idx);
+  const match = text.slice(idx, idx + term.length);
+  const after = text.slice(idx + term.length);
+  el.innerHTML = before + `<mark class="highlight">${match}</mark>` + after;
+}
+
+/* ----------------------------------------------------------
+   LIVE SEARCH FUNCTIONS
+---------------------------------------------------------- */
+function liveSearchCode() {
+  const term = codeSearch.value;
+  const items = document.querySelectorAll(".code-item");
+  let foundIndex = -1;
+
+  items.forEach((item, i) => {
+    const span = item.querySelector(".code-item-text");
+    const text = span.textContent;
+    if (term && text.includes(term) && foundIndex === -1) {
+      foundIndex = i;
+      const idx = text.indexOf(term);
+      const before = text.slice(0, idx);
+      const match = text.slice(idx, idx + term.length);
+      const after = text.slice(idx + term.length);
+      span.innerHTML = before + `<mark class="highlight">${match}</mark>` + after;
+      item.scrollIntoView({ behavior: "smooth", block: "center" });
+      setCurrentIndex(i);
+    } else {
+      span.innerHTML = text; // remove old highlight
+    }
+  });
+
+  if (!term) {
+    items.forEach(item => {
+      const span = item.querySelector(".code-item-text");
+      span.textContent = span.textContent; // reset
+    });
+  }
+}
+
+function liveSearchReading() {
+  const term = readingSearch.value;
+  clearHighlightsInTextElement(readingText);
+  highlightFirstMatchInText(readingText, term);
+  if (term) {
+    const mark = readingText.querySelector("mark.highlight");
+    if (mark) {
+      const rect = mark.getBoundingClientRect();
+      const panelRect = readingPanel.getBoundingClientRect();
+      const delta = (rect.top + rect.height / 2) - (panelRect.top + panelRect.height / 2);
+      readingPanel.scrollTop += delta;
+    }
+  }
+}
+
+function liveSearchRecite() {
+  const term = reciteSearch.value;
+  clearHighlightsInTextElement(reciteText);
+  highlightFirstMatchInText(reciteText, term);
+  if (term) {
+    const mark = reciteText.querySelector("mark.highlight");
+    if (mark) {
+      const rect = mark.getBoundingClientRect();
+      const panelRect = recitePanel.getBoundingClientRect();
+      const delta = (rect.top + rect.height / 2) - (panelRect.top + panelRect.height / 2);
+      recitePanel.scrollTop += delta;
+    }
+  }
+}
+
+/* ----------------------------------------------------------
+   LIVE SEARCH EVENTS
+---------------------------------------------------------- */
+codeSearch.addEventListener("input", liveSearchCode);
+readingSearch.addEventListener("input", liveSearchReading);
+reciteSearch.addEventListener("input", liveSearchRecite);
+
+/* ----------------------------------------------------------
    MODE BUTTONS
 ---------------------------------------------------------- */
 mode1Btn.onclick = () => switchMode(1);
@@ -748,8 +921,25 @@ recitePanel.addEventListener("scroll", handleScrollActivity);
 codePanel.addEventListener("scroll", handleScrollActivity);
 
 /* ----------------------------------------------------------
+   INPUT CHANGE -> SAVE
+---------------------------------------------------------- */
+codePaste.addEventListener("input", () => {
+  saveToStorage();
+});
+readingPaste.addEventListener("input", () => {
+  saveToStorage();
+});
+recitePaste.addEventListener("input", () => {
+  saveToStorage();
+});
+
+/* ----------------------------------------------------------
    INITIAL STATE
 ---------------------------------------------------------- */
+loadFromStorage();
+buildLayers();
+renderCodeList();
+
 readingText.contentEditable = "false";
 reciteText.contentEditable = "false";
 updateTimeLeft();
