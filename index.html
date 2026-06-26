@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Code Reader – Human Reading Animation</title>
+
+<style>
+* {
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #0f172a;
+  color: #e5e7eb;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+header {
+  padding: 10px 16px;
+  background: #020617;
+  border-bottom: 1px solid #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.top-buttons, .mode-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.top-buttons button, .mode-buttons button {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.mode-buttons button {
+  background: #4b5563;
+}
+
+.mode-buttons button.active {
+  background: #22c55e;
+  color: #020617;
+}
+
+.top-buttons button:disabled {
+  background: #1f2937;
+  cursor: default;
+}
+
+.time-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-controls input {
+  width: 70px;
+  padding: 4px;
+  border-radius: 4px;
+  border: 1px solid #374151;
+  background: #020617;
+  color: #e5e7eb;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.paste-area {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.paste-area textarea {
+  width: 100%;
+  height: 80px;
+  background: #020617;
+  border: 1px solid #374151;
+  color: #e5e7eb;
+  padding: 8px;
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.stack-container {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.2fr 1.4fr 1.2fr;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.panel {
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  background: #020617;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 6px 8px;
+  border-bottom: 1px solid #1f2937;
+  font-size: 11px;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.panel-body {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.code-item {
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 2px;
+  display: flex;
+  gap: 6px;
+}
+
+.code-item:hover {
+  background: #111827;
+}
+
+.code-item.active {
+  background: #1d4ed8;
+}
+
+.code-item-index {
+  font-size: 10px;
+  color: #6b7280;
+}
+
+.code-item-text {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: #e5e7eb;
+}
+
+.code-edit {
+  width: 100%;
+  background: #0f172a;
+  border: 1px solid #374151;
+  color: #e5e7eb;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.reading-text,
+.recite-text {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.time-follow {
+  margin-top: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #22c55e;
+  text-shadow: 0 0 6px #2563eb;
+  padding: 4px 0;
+}
+
+.progress {
+  height: 4px;
+  background: #111827;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.progress-inner {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #22c55e, #2563eb);
+  transition: width 0.1s linear;
+}
+</style>
+</head>
+
+<body>
+<header>
+  <h1>CODE READER STACK</h1>
+
+  <div class="top-buttons">
+    <button id="buildStack">Build</button>
+    <button id="playBtn">Play</button>
+    <button id="pauseBtn" disabled>Pause</button>
+    <button id="prevBtn" disabled>Prev</button>
+    <button id="nextBtn" disabled>Next</button>
+  </div>
+
+  <div class="mode-buttons">
+    <button id="mode1Btn" class="active">Mode 1: Auto</button>
+    <button id="mode2Btn">Mode 2: Manual / Editable</button>
+  </div>
+
+  <div class="time-controls">
+    <label>Total Time</label>
+    <input type="number" id="totalTime" value="10" min="1">
+    <button id="applyTime">Apply</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- THREE SEPARATE PASTE FIELDS -->
+  <section class="paste-area">
+    <textarea id="codePaste" placeholder="CODE LAYERS ONLY"></textarea>
+    <textarea id="readingPaste" placeholder="READING LINES ONLY"></textarea>
+    <textarea id="recitePaste" placeholder="RECITE LINES ONLY"></textarea>
+  </section>
+
+  <section class="stack-container">
+
+    <!-- CODE LAYERS PANEL -->
+    <div class="panel">
+      <div class="panel-header">Code Layers (Editable)</div>
+      <div class="panel-body" id="codePanel">
+        <ul id="codeList"></ul>
+      </div>
+    </div>
+
+    <!-- READING PANEL -->
+    <div class="panel">
+      <div class="panel-header">Reading (Character by Character / Editable)</div>
+      <div class="panel-body" id="readingPanel">
+        <div id="readingText" class="reading-text"></div>
+        <div id="timeFollow" class="time-follow">Time Left: 00:00</div>
+        <div class="progress"><div id="readingProgress" class="progress-inner"></div></div>
+      </div>
+    </div>
+
+    <!-- RECITE PANEL -->
+    <div class="panel">
+      <div class="panel-header">Recite (Word by Word / Editable)</div>
+      <div class="panel-body" id="recitePanel">
+        <div id="reciteText" class="recite-text"></div>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<script>
+/* ----------------------------------------------------------
+   GLOBALS
+---------------------------------------------------------- */
+let layers = [];
+let currentIndex = -1;
+
+let totalMinutes = 10;
+let lineDurationMs = 0;
+
+let timer = null;
+let charPos = 0;
+let wordPos = 0;
+
+let readingAccum = "";
+let reciteAccum = "";
+
+let totalMs = 0;
+let elapsedMs = 0;
+let lineElapsedMs = 0;
+
+let mode = 1;
+
+let scrollTimeout = null;
+
+/* ----------------------------------------------------------
+   ELEMENTS
+---------------------------------------------------------- */
+const codePaste = document.getElementById("codePaste");
+const readingPaste = document.getElementById("readingPaste");
+const recitePaste = document.getElementById("recitePaste");
+
+const codeList = document.getElementById("codeList");
+
+const readingText = document.getElementById("readingText");
+const reciteText = document.getElementById("reciteText");
+const readingProgress = document.getElementById("readingProgress");
+const timeFollow = document.getElementById("timeFollow");
+
+const readingPanel = document.getElementById("readingPanel");
+const recitePanel = document.getElementById("recitePanel");
+const codePanel = document.getElementById("codePanel");
+
+const buildBtn = document.getElementById("buildStack");
+const playBtn = document.getElementById("playBtn");
+const pauseBtn = document.getElementById("pauseBtn");
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+
+const totalTimeInput = document.getElementById("totalTime");
+const applyTimeBtn = document.getElementById("applyTime");
+
+const mode1Btn = document.getElementById("mode1Btn");
+const mode2Btn = document.getElementById("mode2Btn");
+
+/* ----------------------------------------------------------
+   PARSE 3 FIELDS INTO LAYERS
+---------------------------------------------------------- */
+function buildLayers() {
+  const codeLines = codePaste.value.split("\n");
+  const readingLines = readingPaste.value.split("\n");
+  const reciteLines = recitePaste.value.split("\n");
+
+  const maxLen = Math.max(codeLines.length, readingLines.length, reciteLines.length);
+
+  layers = [];
+
+  for (let i = 0; i < maxLen; i++) {
+    layers.push({
+      code: codeLines[i] ?? "",
+      reading: readingLines[i] ?? "",
+      recite: reciteLines[i] ?? ""
+    });
+  }
+}
+
+/* ----------------------------------------------------------
+   RENDER CODE LIST (EDITABLE)
+---------------------------------------------------------- */
+function renderCodeList() {
+  codeList.innerHTML = "";
+
+  layers.forEach((layer, i) => {
+    const li = document.createElement("li");
+    li.dataset.index = i;
+
+    li.className = "code-item";
+
+    li.innerHTML = `
+      <span class="code-item-index">${i + 1}</span>
+      <span class="code-item-text">${layer.code}</span>
+    `;
+
+    li.onclick = () => editCodeLine(i, li);
+
+    codeList.appendChild(li);
+  });
+
+  updateHighlight();
+}
+
+/* ----------------------------------------------------------
+   EDIT CODE LINE DIRECTLY
+---------------------------------------------------------- */
+function editCodeLine(i, li) {
+  const textSpan = li.querySelector(".code-item-text");
+  const oldValue = layers[i].code;
+
+  const input = document.createElement("textarea");
+  input.className = "code-edit";
+  input.value = oldValue;
+
+  li.innerHTML = "";
+  li.appendChild(input);
+
+  input.focus();
+
+  input.onblur = () => {
+    layers[i].code = input.value;
+    renderCodeList();
+  };
+}
+
+/* ----------------------------------------------------------
+   SET CURRENT INDEX
+---------------------------------------------------------- */
+function setCurrentIndex(i, fromClick = false) {
+  currentIndex = i;
+  charPos = 0;
+  wordPos = 0;
+  lineElapsedMs = 0;
+  readingProgress.style.width = "0%";
+
+  updateHighlight();
+
+  if (mode === 1) {
+    readingText.innerHTML = readingAccum + "<span id='cursorMarker'></span>";
+    reciteText.textContent = reciteAccum;
+  } else {
+    readingText.textContent = layers.map(l => l.reading).join("\n");
+    reciteText.textContent = layers.map(l => l.recite).join("\n");
+  }
+
+  centerAll();
+
+  if (fromClick && timer && mode === 1) restartTimer();
+}
+
+/* ----------------------------------------------------------
+   HIGHLIGHT ACTIVE
+---------------------------------------------------------- */
+function updateHighlight() {
+  document.querySelectorAll(".code-item").forEach(item => {
+    item.classList.toggle("active", parseInt(item.dataset.index) === currentIndex);
+  });
+}
+
+/* ----------------------------------------------------------
+   TIME FORMAT
+---------------------------------------------------------- */
+function formatTime(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const m = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+  const s = String(totalSeconds % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+function updateTimeLeft() {
+  const remaining = Math.max(0, totalMs - elapsedMs);
+  timeFollow.textContent = "Time Left: " + formatTime(remaining);
+}
+
+/* ----------------------------------------------------------
+   PERFECT CENTER SCROLL
+---------------------------------------------------------- */
+function centerScrollCode() {
+  const active = document.querySelector(".code-item.active");
+  if (!active) return;
+
+  const panel = codePanel;
+  const panelRect = panel.getBoundingClientRect();
+  const itemRect = active.getBoundingClientRect();
+
+  const delta = (itemRect.top + itemRect.height / 2) - (panelRect.top + panelRect.height / 2);
+  panel.scrollTop += delta;
+}
+
+function centerScrollReading() {
+  const cursor = document.getElementById("cursorMarker");
+  if (!cursor) return;
+
+  const panel = readingPanel;
+  const panelRect = panel.getBoundingClientRect();
+  const cursorRect = cursor.getBoundingClientRect();
+
+  const delta = (cursorRect.top + cursorRect.height / 2) - (panelRect.top + panelRect.height / 2);
+  panel.scrollTop += delta;
+}
+
+function centerScrollRecite() {
+  const panel = recitePanel;
+  const panelRect = panel.getBoundingClientRect();
+  const itemRect = reciteText.getBoundingClientRect();
+
+  const delta = (itemRect.top + itemRect.height / 2) - (panelRect.top + panelRect.height / 2);
+  panel.scrollTop += delta;
+}
+
+function centerAll() {
+  centerScrollCode();
+  centerScrollReading();
+  centerScrollRecite();
+}
+
+/* ----------------------------------------------------------
+   TIMER + AUTO MODE
+---------------------------------------------------------- */
+function computeLineDuration() {
+  if (layers.length === 0) return;
+  totalMs = totalMinutes * 60 * 1000;
+  lineDurationMs = totalMs / layers.length;
+  updateTimeLeft();
+}
+
+function startTimer() {
+  if (mode !== 1) return;
+  if (timer) return;
+  if (currentIndex < 0) setCurrentIndex(0);
+
+  computeLineDuration();
+  timer = setInterval(step, 60);
+
+  playBtn.disabled = true;
+  pauseBtn.disabled = false;
+  prevBtn.disabled = false;
+  nextBtn.disabled = false;
+}
+
+function pauseTimer() {
+  clearInterval(timer);
+  timer = null;
+  playBtn.disabled = false;
+  pauseBtn.disabled = true;
+}
+
+function restartTimer() {
+  pauseTimer();
+  startTimer();
+}
+
+function step() {
+  if (mode !== 1) return;
+
+  const layer = layers[currentIndex];
+  if (!layer) return;
+
+  const code = layer.reading || layer.code;
+  const words = (layer.recite || layer.code).split(" ");
+
+  elapsedMs += 60;
+  lineElapsedMs += 60;
+  updateTimeLeft();
+
+  const charInterval = lineDurationMs / Math.max(code.length, 1);
+  const wordInterval = lineDurationMs / Math.max(words.length, 1);
+
+  let changed = false;
+
+  while (charPos <= code.length && lineElapsedMs >= charPos * charInterval) {
+    const partial = code.substring(0, charPos);
+    readingText.innerHTML = readingAccum + partial + "<span id='cursorMarker'></span>";
+    charPos++;
+    changed = true;
+  }
+
+  while (wordPos < words.length && lineElapsedMs >= wordPos * wordInterval) {
+    const partialWords = words.slice(0, wordPos + 1).join(" ");
+    reciteText.textContent = reciteAccum + partialWords;
+    wordPos++;
+    changed = true;
+  }
+
+  if (changed) centerAll();
+
+  const progress = code.length === 0 ? 1 : Math.min(charPos / code.length, 1);
+  readingProgress.style.width = (progress * 100) + "%";
+
+  if (charPos > code.length && wordPos >= words.length) {
+    readingAccum += code + "\n";
+    reciteAccum += words.join(" ") + "\n";
+    nextLine();
+    centerAll();
+  }
+
+  if (elapsedMs >= totalMs) {
+    pauseTimer();
+    updateTimeLeft();
+  }
+}
+
+function nextLine() {
+  if (currentIndex < layers.length - 1) {
+    setCurrentIndex(currentIndex + 1);
+  } else {
+    pauseTimer();
+  }
+}
+
+function prevLine() {
+  if (currentIndex > 0) {
+    setCurrentIndex(currentIndex - 1);
+  }
+}
+
+/* ----------------------------------------------------------
+   MANUAL MODE (ALL EDITABLE)
+---------------------------------------------------------- */
+/* ----------------------------------------------------------
+   MANUAL MODE (ALL EDITABLE)
+---------------------------------------------------------- */
+function switchMode(newMode) {
+  if (mode === newMode) return;
+
+  // If leaving manual mode, sync edits back into layers
+  if (mode === 2 && newMode === 1) {
+    const editedReading = readingText.textContent.split("\n");
+    const editedRecite = reciteText.textContent.split("\n");
+
+    for (let i = 0; i < layers.length; i++) {
+      if (editedReading[i] !== undefined) layers[i].reading = editedReading[i];
+      if (editedRecite[i] !== undefined) layers[i].recite = editedRecite[i];
+    }
+
+    // Update paste fields so everything stays in sync
+    codePaste.value = layers.map(l => l.code).join("\n");
+    readingPaste.value = layers.map(l => l.reading).join("\n");
+    recitePaste.value = layers.map(l => l.recite).join("\n");
+  }
+
+  mode = newMode;
+
+  if (mode === 1) {
+    // AUTO MODE
+    readingText.contentEditable = "false";
+    reciteText.contentEditable = "false";
+
+    playBtn.disabled = false;
+    pauseBtn.disabled = true;
+    prevBtn.disabled = layers.length === 0;
+    nextBtn.disabled = layers.length === 0;
+
+    mode1Btn.classList.add("active");
+    mode2Btn.classList.remove("active");
+
+    readingAccum = "";
+    reciteAccum = "";
+    elapsedMs = 0;
+    lineElapsedMs = 0;
+
+    computeLineDuration();
+    if (layers.length > 0) setCurrentIndex(0);
+
+  } else {
+    // MANUAL MODE
+    pauseTimer();
+
+    playBtn.disabled = true;
+    pauseBtn.disabled = true;
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+
+    readingText.contentEditable = "true";
+    reciteText.contentEditable = "true";
+
+    mode1Btn.classList.remove("active");
+    mode2Btn.classList.add("active");
+
+    readingText.textContent = layers.map(l => l.reading).join("\n");
+    reciteText.textContent = layers.map(l => l.recite).join("\n");
+
+    readingProgress.style.width = "0%";
+  }
+
+  centerAll();
+}
+
+/* ----------------------------------------------------------
+   SCROLL ACTIVITY
+---------------------------------------------------------- */
+function handleScrollActivity() {
+  if (scrollTimeout) clearTimeout(scrollTimeout);
+  scrollTimeout = setTimeout(() => {
+    if (mode === 2) centerAll();
+  }, 6000);
+}
+
+/* ----------------------------------------------------------
+   BUILD STACK
+---------------------------------------------------------- */
+buildBtn.onclick = () => {
+  buildLayers();
+  readingAccum = "";
+  reciteAccum = "";
+  elapsedMs = 0;
+  lineElapsedMs = 0;
+
+  computeLineDuration();
+  renderCodeList();
+
+  if (layers.length > 0) {
+    setCurrentIndex(0);
+  } else {
+    currentIndex = -1;
+    readingText.textContent = "";
+    reciteText.textContent = "";
+  }
+
+  if (mode === 2) {
+    readingText.textContent = layers.map(l => l.reading).join("\n");
+    reciteText.textContent = layers.map(l => l.recite).join("\n");
+  }
+
+  centerAll();
+};
+
+/* ----------------------------------------------------------
+   PLAY / PAUSE / NEXT / PREV
+---------------------------------------------------------- */
+playBtn.onclick = () => {
+  startTimer();
+  centerAll();
+};
+
+pauseBtn.onclick = pauseTimer;
+
+nextBtn.onclick = () => {
+  nextLine();
+  centerAll();
+};
+
+prevBtn.onclick = () => {
+  prevLine();
+  centerAll();
+};
+
+/* ----------------------------------------------------------
+   APPLY TIME
+---------------------------------------------------------- */
+applyTimeBtn.onclick = () => {
+  totalMinutes = parseFloat(totalTimeInput.value);
+  elapsedMs = 0;
+  lineElapsedMs = 0;
+  computeLineDuration();
+};
+
+/* ----------------------------------------------------------
+   MODE BUTTONS
+---------------------------------------------------------- */
+mode1Btn.onclick = () => switchMode(1);
+mode2Btn.onclick = () => switchMode(2);
+
+/* ----------------------------------------------------------
+   SCROLL LISTENERS
+---------------------------------------------------------- */
+readingPanel.addEventListener("scroll", handleScrollActivity);
+recitePanel.addEventListener("scroll", handleScrollActivity);
+codePanel.addEventListener("scroll", handleScrollActivity);
+
+/* ----------------------------------------------------------
+   INITIAL STATE
+---------------------------------------------------------- */
+readingText.contentEditable = "false";
+reciteText.contentEditable = "false";
+updateTimeLeft();
+centerAll();
+</script>
+</body>
+</html>
